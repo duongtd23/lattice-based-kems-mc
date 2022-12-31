@@ -1,0 +1,206 @@
+--- Kyber specification
+
+fmod KYBER-ENCRYPTION is
+  pr ENCRYPTION .
+--- compress_q and decompress_q functions
+  op decompr : Poly NzNat -> Poly .
+  op decompr : Vector NzNat -> Vector .
+  op compr : Poly NzNat -> Poly .
+  op compr : Vector NzNat -> Vector .
+
+  vars M : Poly .
+  vars E0 E1 : Poly .
+  ceq compr(E0 p+ decompr(M,1), 1) = M if isSmall?(E0) .
+endfm
+
+fmod KYBER-OCOMP is
+  pr OBSERVABLE-COMPONENT .
+  pr COLLECTION{Poly} * (sort Collection{Poly} to ColPoly ) .
+  pr SLIST{Poly} * (sort List{Poly} to ListPoly ) .
+
+***(
+ * additional observable components
+)
+--- random d (on Alice side)
+  op (d[_]:_) : Prin Poly -> OComp [ctor] .
+
+--- random m (on Bob side)
+  op (m[_]:_) : Prin Poly -> OComp [ctor] .
+
+--- random seeds
+  op (rd-d:_) : ListPoly -> OComp [ctor] .
+  op (rd-m:_) : ListPoly -> OComp [ctor] .
+
+--- random values owned by Eve
+  op (ds:_) : ColPoly -> OComp [ctor] .
+  op (ms:_) : ColPoly -> OComp [ctor] .
+endfm
+
+view OComp from TRIV to KYBER-OCOMP is
+  sort Elt to OComp .
+endv
+
+fmod CONFIG is
+  pr SOUP{OComp} .
+  pr KYBER-ENCRYPTION .
+  sort Config .
+  op {_} : Soup{OComp} -> Config [ctor] .
+
+--- initial states
+  op init : -> Config .
+
+--- constants, known by everybody
+  ops n p q : -> NzNat .
+  ops du dv : -> NzNat .
+
+  op epsilon1 : Poly -> Poly .
+  op epsilon2 : Vector -> Vector .
+
+  ops d1 d2 m1 m2 : -> Poly .
+  ops alice bob : -> Prin .
+
+  eq init = {(nw: empty) (prins: (alice ; bob ; eve))
+    (rd-d: (d1 , d2)) (rd-m: (m1 , m2)) 
+    (keys[alice]: empty) (keys[bob]: empty) (glean-keys: empty)
+    (d[alice]: 0) (d[bob]: 0) (m[alice]: 0) (m[bob]: 0)
+    (ds: empty) (ms: empty)} .
+
+  var VP : Poly .
+  var U : Vector .
+
+--- approximation
+  eq isSmall?(epsilon1(VP)) = true .
+  eq isSmall?(epsilon2(U)) = true .
+  eq decompr(compr(VP,dv),dv) = VP p+ epsilon1(VP) .
+  eq decompr(compr(U,du),du)  = U v+ epsilon2(U) .
+endfm
+
+mod KYBER is 
+  pr CONFIG + SAMPLING .
+  vars A B C : Prin .
+  vars PoC : ColPoly .
+  vars KS : ColKey .
+  vars PoL : ListPoly .
+  vars K1 K2 K3 : Poly .
+  vars MS : ColMsg .
+  var OCs : Soup{OComp} . 
+  vars PS : ColPrin .
+  vars D D2 M M0 M2 P1 P2 Rho RhoA M' V CV V' VB CVB VB' Rseed Sig : Poly .
+  vars PK T U CU U' UB CUB UB' TA : Vector .
+  vars MsgStat : MsgState .
+  vars Kr Kr2 : PolyPair .
+
+--- CPAPKE.enc: pk(= t + ro), m, r
+  op enc-u : Vector Poly Poly Poly -> Vector .
+  op enc-v : Vector Poly Poly Poly -> Poly .
+  eq enc-u(T, Rho, M, Rseed) = compr(
+    tp(gen-A(Rho)) m* sample-r(Rseed) v+ sample-e1(Rseed),
+    du) .
+  eq enc-v(T, Rho, M, Rseed) = compr(
+    tp(T) dot sample-r(Rseed) p+ sample-e2(Rseed) p+ decompr(M, 1),
+    dv) .
+
+--- keygen
+  crl [keygen] : {(rd-d: (D, PoL)) (d[A]: P1) 
+    (prins: (A ; B ; PS)) (nw: MS) OCs}
+  => {(rd-d: PoL) (d[A]: D) 
+    (prins: (A ; B ; PS)) 
+    (nw: (MS ; msg1(A,A,B, 
+      (gen-A(Rho) m* sample-s(Sig) v+ sample-e(Sig)) && Rho, sent))) OCs} 
+  if Rho := 1st(G(D)) /\ Sig := 2nd(G(D)) .
+
+--- encaps
+  crl [encaps] : {(rd-m: (M0, PoL)) (m[B]: P1) (keys[B]: KS)
+    (nw: (msg1(C,A,B, T && Rho, sent) ; MS)) OCs}
+  => {(rd-m: PoL) (m[B]: M0) 
+    (keys[B]: (KS ; key(KDF(1st(Kr) || H(CU && CV)), A)))
+    (nw: (msg1(C,A,B, T && Rho, replied) ;
+          msg2(B,B,A, CU && CV, sent) ;
+          MS)) OCs} 
+  if M := H(M0) /\
+    Kr := G(M || H(T && Rho)) /\
+    CU := enc-u(T, Rho, M, 2nd(Kr)) /\
+    CV := enc-v(T, Rho, M, 2nd(Kr)) .
+
+--- decaps
+  crl [decaps] : {(d[A]: D) (keys[A]: KS)
+    (nw: (msg1(A,A,B, T && Rho, MsgStat) ;
+          msg2(C,B,A, CU && CV, sent) ; MS)) OCs}
+  => {(d[A]: D) 
+    (keys[A]: (KS ; key(KDF(1st(Kr2) || H(CU && CV)), B)))
+    (nw: (msg1(A,A,B, T && Rho, MsgStat) ;
+          msg2(C,B,A, CU && CV, replied) ; MS)) OCs} 
+  if Sig := 2nd(G(D)) /\
+    U' := decompr(CU, du) /\
+    V' := decompr(CV, dv) /\
+    M' := compr(V' p- tp(sample-s(Sig)) dot U', 1) /\
+    Kr2 := G(M' || H(T && Rho)) /\
+    CU == enc-u(T,Rho,M',2nd(Kr2)) /\
+    CV == enc-v(T,Rho,M',2nd(Kr2)) .
+
+  rl [stutter] : {(rd-d: null) OCs} => {(rd-d: null) OCs} .
+
+***(
+  * eve intercepts a message msg1 sent from alice to bob and
+  * sends a fake message to bob
+)
+  rl [build-ds] : {(rd-d: (D, PoL)) (ds: PoC) OCs}
+  => {(rd-d: PoL) (ds: (PoC ; D)) OCs} .
+  rl [build-ms] : {(rd-m: (M, PoL)) (ms: PoC) OCs}
+  => {(rd-m: PoL) (ms: (PoC ; M)) OCs} .
+
+  crl [keygen-eve] : {(ds: (D ; PoC))
+    (nw: (msg1(A,A,B, TA && RhoA, sent) ; MS)) OCs}
+  => {(ds: (D ; PoC))
+    (nw: (msg1(A,A,B, TA && RhoA, intercepted) ;
+          msg1(eve,A,B, 
+      (gen-A(Rho) m* sample-s(Sig) v+ sample-e(Sig)) && Rho, sent) ; MS)) OCs}
+  if Rho := 1st(G(D)) /\ Sig := 2nd(G(D)) .
+
+  crl [encaps-eve] : {(ms: (M0 ; PoC))
+    (nw: (msg1(A,A,B, TA && RhoA, intercepted) ; MS))
+    (glean-keys: KS) OCs}
+  => {(ms: (M0 ; PoC))
+    (nw: (msg1(A,A,B, TA && RhoA, intercepted) ;
+          msg2(eve,B,A, CU && CV, sent) ; MS)) 
+    (glean-keys: (key(KDF(1st(Kr) || H(CU && CV)), A) ; KS)) OCs} 
+  if M := H(M0) /\
+    Kr := G(M || H(TA && RhoA)) /\
+    CU := enc-u(TA, RhoA, M, 2nd(Kr)) /\
+    CV := enc-v(TA, RhoA, M, 2nd(Kr)) /\
+    msg2(eve,B,A, CU && CV, sent) \in MS = false /\
+    msg2(eve,B,A, CU && CV, replied) \in MS = false .
+
+  crl [decaps-eve] : {(ds: (D ; PoC))
+    (nw: (msg1(eve,A,B, T && Rho, replied) ;
+          msg2(B,B,A, CUB && CVB, sent) ; MS))
+    (glean-keys: KS) OCs}
+  => {(ds: (D ; PoC))
+    (nw: (msg1(eve,A,B, T && Rho, replied) ;
+          msg2(B,B,A, CUB && CVB, intercepted) ; MS))
+    (glean-keys: (key(KDF(1st(Kr2) || H(CUB && CVB)), B) ; KS)) OCs} 
+  if Sig := 2nd(G(D)) /\
+    U' := decompr(CUB, du) /\
+    V' := decompr(CVB, dv) /\
+    M' := compr(V' p- tp(sample-s(Sig)) dot U', 1) /\
+    Kr2 := G(M' || H(T && Rho)) /\
+    CUB == enc-u(T,Rho,M',2nd(Kr2)) /\
+    CVB == enc-v(T,Rho,M',2nd(Kr2)) .
+endm
+
+--- checking the specification correctness
+search [1] in KYBER : 
+  init =>* {(keys[alice]: key(K1,bob)) (keys[bob]: key(K1,alice)) OCs} .
+
+--- end of files
+eof  
+
+--- finding a state in which eve can learn two keys K1 and K2 of Alice and Bob
+--- to run this command, comment out the "eof" command above, or 
+--- move this command to before the "eof" command above
+search [1] in KYBER : 
+  init =>* {(keys[alice]: key(K1,bob)) (keys[bob]: key(K2,alice)) 
+    (glean-keys: (key(K1,alice) ; key(K2,bob) ; KS)) OCs} .
+
+--- confirming the reachable state space is finite 
+search in KYBER : init =>* {OCs} . 

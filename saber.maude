@@ -1,0 +1,239 @@
+fmod SABER-POLYNOMIAL is
+  pr POLYNOMIAL .
+
+  op _md_ : Poly NzNat -> Poly [ctor prec 31] .
+
+  vars P0 P1 P2 P3 : Poly .
+  vars K K2 : NzNat .
+
+  eq (P1 p+ (P2 md K)) md K = (P1 p+ P2) md K .
+  eq neg(P1 md K) = neg(P1) md K .
+
+--- bitwise (right) shift
+  op shiftR : Poly Int -> Poly .
+
+--- borrow from maude
+  op _^_ : Int Int -> Int [prec 29 gather (E e) special (
+    id-hook NumberOpSymbol (^)
+    op-hook succSymbol (s_ : Nat ~> NzNat)
+    op-hook minusSymbol (-_ : NzNat ~> Int))] .
+endfm
+
+fmod SABER-VECTOR is
+  pr VECTOR + SABER-POLYNOMIAL .
+
+  op _md_ : Vector NzNat -> Vector [prec 31] .
+  op shiftR : Vector Int -> Vector .
+endfm
+
+fmod SABER-ENCRYPTION is
+  pr ENCRYPTION .
+
+--- hash functions
+  op F : PVPair -> Poly .
+endfm
+
+fmod SABER-OCOMP is
+  pr OBSERVABLE-COMPONENT .
+  pr SABER-POLYNOMIAL + SABER-VECTOR + SABER-ENCRYPTION .
+  pr COLLECTION{Poly} * (sort Collection{Poly} to ColPoly ) .
+  pr SLIST{Poly} * (sort List{Poly} to ListPoly ) .
+
+***(
+ * additional observable components
+)
+--- random seeds on Alice side
+  op (seed[_]:_) : Prin Poly -> OComp [ctor] .
+  op (r[_]:_) : Prin Poly -> OComp [ctor] .
+  
+--- random seeds on Bob side
+  op (m[_]:_) : Prin Poly -> OComp [ctor] .
+
+--- random seeds
+  op (rd-seed:_) : ListPoly -> OComp [ctor] .
+  op (rd-r:_) : ListPoly -> OComp [ctor] .
+  op (rd-m:_) : ListPoly -> OComp [ctor] .
+
+--- random values owned by Eve
+  op (seeds:_) : ColPoly -> OComp [ctor] .
+  op (rs:_) : ColPoly -> OComp [ctor] .
+  op (ms:_) : ColPoly -> OComp [ctor] .
+endfm
+
+view OComp from TRIV to SABER-OCOMP is
+  sort Elt to OComp .
+endv
+
+fmod CONFIG is
+  pr SOUP{OComp} .
+  sort Config .
+  op {_} : Soup{OComp} -> Config [ctor] .
+  
+--- initial states
+  op init : -> Config .
+
+--- constants, known by everybody
+  ops esp esq esT : -> NzNat .
+  ops h1 h2 : -> Poly .
+  ops h : -> Vector .
+  ops p q t : -> NzNat .
+  --- eq p = 2 ^ esp .
+  --- eq q = 2 ^ esq .
+  --- eq t = 2 ^ esT .
+
+  ops seed1 seed2 r1 r2 m1 m2 : -> Poly .
+  ops alice bob : -> Prin .
+
+  eq init = {(nw: empty) (prins: (alice ; bob ; eve))
+    (rd-seed: (seed1 , seed2)) (rd-r: (r1 , r2)) (rd-m: (m1 , m2)) 
+    (keys[alice]: empty) (keys[bob]: empty) (glean-keys: empty)
+    (seed[alice]: 0) (seed[bob]: 0) (r[alice]: 0) (r[bob]: 0)
+    (m[alice]: 0) (m[bob]: 0)
+    (seeds: empty) (rs: empty) (ms: empty)} .
+
+  vars P1 P2 P3 M CM : Poly .
+  vars S S' B B' : Vector .
+  vars MA : Matrix .
+  vars K Q K2 PT 2PT 2P1 : Int .
+
+--- approximation
+  ceq tp(shiftR( (MA m* S' v+ h) md q, esq - esp )) dot S
+    p+ neg(tp(shiftR( (tp(MA) m* S v+ h) md q, esq - esp )) dot S') = 0
+  if isSmall?(S) and isSmall?(S') . 
+
+  ceq 2PT p* shiftR(CM, PT) = CM 
+  if PT := esp - esT /\
+     2PT := 2 ^ PT .
+
+  ceq shiftR( (h2 p+ neg(h1) p+ 2P1 p* M) md p, esp - 1) = M
+  if 2P1 := 2 ^ (esp - 1) .
+endfm
+
+mod SABER is 
+  pr CONFIG + SAMPLING .
+  vars A B C : Prin .
+  vars PC1 PC2 PC3 PC4 : ColPoly .
+  vars KS : ColKey .
+  vars PL PL2 PL3 : ListPoly .
+  vars K1 K2 K3 : Poly .
+  vars KE1 KE2 KE3 : Key .
+  vars MS MS2 MS3 : ColMsg .
+  var OCs : Soup{OComp} . 
+  vars PS : ColPrin .
+  vars M M2 SD M' R V V' P1 P2 CM SD-A CM-B : Poly .
+  vars VB VB' PK T U UB TA S S' VB-A VB'-B : Vector .
+  vars MG1 MG2 MG3 MG4 : Msg .
+  vars MsgStat MsgStat2 : MsgState .
+  vars Kr Kr' RoSig : PolyPair .
+  vars MA : Matrix .
+  vars CB CB' : PVPair .
+
+--- PKE.enc: seed, b, m, r
+  op enc : Poly Vector Poly Poly -> PVPair .
+  ceq enc(SD, VB, M, R) = VB' && CM
+  if MA := gen-A(SD) /\
+    S' := sample-s(R) /\
+    VB' := shiftR((MA m* S' v+ h) md q, esq - esp) /\
+    V' := tp(VB) dot S' /\
+    CM := shiftR( ((V' p+ h1) p- (2 ^ (esp - 1)) p* M) md p, esp - esT) .
+
+--- keygen
+  crl [keygen] : {(rd-seed: (SD, PL)) (rd-r: (R, PL2)) 
+    (seed[A]: P1) (r[A]: P2) 
+    (prins: (A ; B ; PS)) (nw: MS) OCs}
+  => {(rd-seed: PL) (rd-r: PL2) (seed[A]: SD) (r[A]: R) 
+    (prins: (A ; B ; PS)) 
+    (nw: (MS ; msg1(A,A,B, VB && SD, sent))) OCs} 
+  if MA := gen-A(SD) /\
+    S := sample-s(R) /\
+    VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
+
+--- encaps
+  crl [encaps] : {(rd-m: (M, PL)) (m[B]: P1) (keys[B]: KS)
+    (nw: (msg1(C,A,B, VB && SD, sent) ; MS)) OCs}
+  => {(rd-m: PL) (m[B]: M) 
+    (keys[B]: (KS ; key( H(H(CB) || 1st(Kr)) , A)))
+    (nw: (msg1(C,A,B, VB && SD, replied) ; 
+      msg2(B,B,A, CB, sent) ;
+      MS)) OCs} 
+  if Kr := G(F(VB && SD) || M) /\
+    CB := enc(SD,VB,M,2nd(Kr)) .
+
+--- decaps
+  crl [decaps] : {(seed[A]: SD) (r[A]: R)  (keys[A]: KS)
+    (nw: (msg1(A,A,B, VB && SD, MsgStat) ; 
+      msg2(C,B,A, VB' && CM, sent) ; MS)) OCs}
+  => {(seed[A]: SD) (r[A]: R) 
+    (keys[A]: (KS ; key( H(H(CB') || 1st(Kr')) , B)))
+    (nw: (msg1(A,A,B, VB && SD, MsgStat) ;
+      msg2(C,B,A, VB' && CM, replied) ; MS)) OCs} 
+  if MA := gen-A(SD) /\
+    S := sample-s(R) /\
+    VB == shiftR((tp(MA) m* S v+ h) md q, esq - esp) /\
+    V := tp(VB') dot S /\
+    M' := shiftR(((V p+ h2) p- 2 ^ (esp - esT) p* CM) md p, esp - 1) /\
+    Kr' := G(F(VB && SD) || M') /\
+    CB' := enc(SD,VB,M',2nd(Kr')) /\
+    CB' == VB' && CM .
+
+  rl [stutter] : {(rd-seed: null) OCs} => {(rd-seed: null) OCs} .
+
+***(
+  * eve intercepts a message msg1 sent from alice to bob and
+  * sends a fake message to bob
+)
+  rl [build-sds] : {(rd-seed: (SD, PL)) (seeds: PC1) OCs}
+  => {(rd-seed: PL) (seeds: (SD ; PC1)) OCs} .
+
+  rl [build-rs] : {(rd-r: (R, PL2)) (rs: PC2) OCs}
+  => {(rd-r: PL2) (rs: (R ; PC2)) OCs} .
+
+  rl [build-ms] : {(rd-m: (M, PL)) (ms: PC1) OCs}
+  => {(rd-m: PL) (ms: (M ; PC1)) OCs} .
+
+  crl [keygen-eve] : {(seeds: (SD ; PC1)) (rs: (R ; PC2))
+    (nw: (msg1(A,A,B, VB-A && SD-A, sent) ; MS)) OCs}
+  => {(seeds: (SD ; PC1)) (rs: (R ; PC2))
+    (nw: (msg1(A,A,B, VB-A && SD-A, intercepted) ;
+      msg1(eve,A,B, VB && SD, sent) ; MS)) OCs}
+  if MA := gen-A(SD) /\
+    S := sample-s(R) /\
+    VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
+
+  crl [encaps-eve] : {(ms: (M ; PC3))
+    (nw: (msg1(A,A,B, VB-A && SD-A, intercepted) ; MS)) 
+    (glean-keys: KS) OCs}
+  => {(ms: (M ; PC3))
+    (nw: (msg1(A,A,B, VB-A && SD-A, intercepted) ;
+      msg2(eve,B,A, CB, sent) ; MS)) 
+    (glean-keys: (KS ; key( H(H(CB) || 1st(Kr)), A)) ) OCs} 
+  if Kr := G(F(VB-A && SD-A) || M) /\
+    CB := enc(SD-A,VB-A,M,2nd(Kr)) /\
+    msg2(eve,B,A, CB, sent) \in MS = false /\
+    msg2(eve,B,A, CB, replied) \in MS = false .
+
+  crl [decaps-eve] : {(seeds: (SD ; PC1)) (rs: (R ; PC2)) 
+    (ms: (M ; PC3))
+    (nw: (msg1(eve,A,B, VB && SD, replied) ;
+      msg2(B,B,A, VB'-B && CM-B, sent) ; MS)) 
+    (glean-keys: KS) OCs}
+  => {(seeds: (SD ; PC1)) (rs: (R ; PC2)) (ms: (M ; PC3))
+    (nw: (msg1(eve,A,B, VB && SD, replied) ;
+      msg2(B,B,A, VB'-B && CM-B, intercepted) ; MS)) 
+    (glean-keys: (KS ; key(H(H(CB') || 1st(Kr')), B)) ) OCs} 
+  if MA := gen-A(SD) /\
+    S := sample-s(R) /\
+    VB == shiftR((tp(MA) m* S v+ h) md q, esq - esp) /\
+    V := tp(VB'-B) dot S /\
+    M' := shiftR(((V p+ h2) p- 2 ^ (esp - esT) p* CM-B) md p, esp - 1) /\
+    Kr' := G(F(VB && SD) || M') /\
+    CB' := enc(SD,VB,M',2nd(Kr')) /\
+    CB' == VB'-B && CM-B .
+endm
+
+search [1] in SABER : 
+  init =>* {(keys[alice]: key(K1,bob)) (keys[bob]: key(K2,alice)) 
+    (glean-keys: (key(K1,alice) ; key(K2,bob) ; KS)) OCs} .
+eof
+
+search in SABER : init =>* {OCs} . 

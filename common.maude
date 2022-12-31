@@ -1,0 +1,229 @@
+--- This is a base specification, specifying all common parts in the designs of the three lattice-based KEMS.
+
+fmod PRINCIPAL is
+  sort Prin .
+  op eve : -> Prin [ctor] .
+endfm
+
+fmod COLLECTION{X :: TRIV} is
+  pr NAT .
+  sort Collection{X} .
+  subsort X$Elt < Collection{X} .
+  op empty : -> Collection{X} [ctor] .
+  op _;_ : Collection{X} Collection{X} -> Collection{X} [assoc comm id: empty ctor] .
+  op _\in_ : X$Elt Collection{X} -> Bool .
+
+  var E : X$Elt .
+  var C : Collection{X} .
+  eq E \in (E ; C) = true .
+  eq E \in C = false [owise] .
+endfm
+
+fmod SLIST{X :: TRIV} is
+  pr NAT .
+  sort List{X} .
+  subsort X$Elt < List{X} .
+  op null : -> List{X} [ctor] .
+  op _,_ : List{X} List{X} -> List{X} [assoc id: null ctor] .
+endfm
+
+fmod SOUP{D :: TRIV} is
+  sort Soup{D} .
+  subsort D$Elt < Soup{D} .
+  op empty : -> Soup{D} [ctor] .
+  op __ : Soup{D} Soup{D} -> Soup{D} [ctor assoc comm id: empty] .
+endfm
+
+fmod POLYNOMIAL is
+  pr INT .
+  sort Poly .
+  subsort Int < Poly .
+
+  op _p+_ : Poly Poly -> Poly [ctor assoc comm prec 33 gather (E e)] .
+  op _p*_ : Poly Poly -> Poly [ctor assoc comm prec 31 gather (E e)] .
+  op _p-_ : Poly Poly -> Poly [prec 33 gather (E e)] .
+  op neg_ : Poly -> Poly [ctor] .
+
+  vars P0 P1 P2 P3 : Poly .
+  eq P1 p+ 0 = P1 .
+  eq P1 p* 0 = 0 .
+  eq P1 p* 1 = P1 .
+  eq P1 p* (P2 p+ P3) = (P1 p* P2) p+ (P1 p* P3) .
+  eq P1 p- P2 = P1 p+ neg(P2) .
+  eq P1 p+ neg(P1) = 0 . 
+  eq neg(neg(P1)) = P1 .
+  eq neg(P1 p+ P2) = neg(P1) p+ neg(P2) .
+endfm
+
+fmod VECTOR is
+  pr POLYNOMIAL .
+  sort Vector .
+  subsort Poly < Vector .
+
+  op _v+_ : Vector Vector -> Vector [assoc comm prec 33 gather (E e)] .
+
+***(
+ * transpose operator
+ * a vector is supposed to be a column vector,
+ * this operator transposes a vector to a row vector
+)
+  op tp : Vector -> Vector .
+
+***(
+ * inner product of two vector
+ * two input vectors must have a same size
+)
+  op _dot_ : Vector Vector -> Poly [prec 31 gather (E e)] .
+
+  vars V1 V2 V3 V : Vector .
+  vars P1 P2 P3 : Poly .
+  eq (V1 v+ V2) dot V3 = (V1 dot V3) p+ (V2 dot V3) .
+  eq V3 dot (V1 v+ V2) = (V3 dot V1) p+ (V3 dot V2) .
+  eq tp(tp(V1)) = V1 .
+  eq tp(V1 v+ V2) = tp(V1) v+ tp(V2) .
+
+  op isSmall? : Vector -> Bool .
+  eq isSmall?(tp(V)) = isSmall?(V) .
+  ceq isSmall?(V v+ V2) = true 
+    if (isSmall?(V) and isSmall?(V2)) .
+  ceq isSmall?(V dot V2) = true 
+    if (isSmall?(V) and isSmall?(V2)) .
+  ceq isSmall?(P1 p+ P2) = true 
+    if (isSmall?(P1) and isSmall?(P2)) .
+  ceq isSmall?(neg(P1)) = true 
+    if isSmall?(P1) .
+endfm
+
+***(
+ * we only consider square matrices
+)
+fmod MATRIX is
+  pr VECTOR .
+  sort Matrix .
+  subsort Vector < Matrix .
+
+--- transpose operator
+  op tp : Matrix -> Matrix .
+
+--- multiplication is defined between only a matrix and a vector
+  op _m*_ : Matrix Vector -> Vector [prec 31 gather (E e)] .
+
+  vars M M2 : Matrix .
+  vars V V2 : Vector .
+
+  eq tp(tp(M)) = M .
+  eq tp(M m* V) dot V2 = tp(V) dot (tp(M) m* V2) .
+endfm
+
+fmod POLY-PAIR is
+  pr POLYNOMIAL .
+  sort PolyPair .
+
+  op _||_ : Poly Poly -> PolyPair [ctor] .
+  op 1st : PolyPair -> Poly .
+  op 2nd : PolyPair -> Poly .
+
+  vars E0 E1 : Poly .
+  eq 1st(E0 || E1) = E0 .
+  eq 2nd(E0 || E1) = E1 .
+endfm
+
+fmod POLY-VECTOR-PAIR is
+  pr VECTOR .
+  sort PVPair .
+  subsort Vector < PVPair .
+  op _&&_ : Vector Poly -> PVPair [ctor] .
+endfm
+
+fmod ENCRYPTION is
+  pr POLY-PAIR + POLY-VECTOR-PAIR + MATRIX .
+
+--- hash functions
+  op G : PolyPair -> PolyPair .
+  op G : Poly -> PolyPair .
+  op H : Poly -> Poly .
+  op H : PolyPair -> Poly .
+  op H : PVPair -> Poly .
+
+--- key derivation function
+  op KDF : PolyPair -> Poly .
+endfm
+
+fmod SAMPLING is
+  pr MATRIX .
+
+--- generate a matrix from a random seed
+  op gen-A  : Poly -> Matrix .
+
+--- alice side
+  op sample-s  : Poly -> Vector .
+  op sample-e  : Poly -> Vector .
+
+--- bob side
+  op sample-r  : Poly -> Vector .
+  op sample-e1 : Poly -> Vector .
+  op sample-e2 : Poly -> Poly .
+
+  vars P : Poly .
+  eq isSmall?(sample-s(P))  = true .
+  eq isSmall?(sample-e(P))  = true .
+  eq isSmall?(sample-r(P))  = true .
+  eq isSmall?(sample-e1(P)) = true .
+  eq isSmall?(sample-e2(P)) = true .
+endfm
+
+fmod MSG-STATE is
+  sort MsgState .
+  ops sent replied intercepted : -> MsgState .
+endfm
+
+fmod MESSAGE is
+  pr PRINCIPAL + POLY-PAIR + POLY-VECTOR-PAIR + MATRIX + MSG-STATE .
+  sort Msg .
+
+  op msg1 : Prin Prin Prin PVPair MsgState -> Msg [ctor] .
+  op msg2 : Prin Prin Prin PVPair MsgState -> Msg [ctor] .
+endfm
+
+fmod KEY is 
+  pr POLYNOMIAL + PRINCIPAL .
+  sort Key .
+  op key : Poly Prin -> Key [ctor] .
+endfm
+
+view Prin from TRIV to PRINCIPAL is
+  sort Elt to Prin .
+endv
+view Poly from TRIV to POLYNOMIAL is
+  sort Elt to Poly .
+endv
+view Msg from TRIV to MESSAGE is
+  sort Elt to Msg .
+endv
+view Key from TRIV to KEY is
+  sort Elt to Key .
+endv
+
+fmod OBSERVABLE-COMPONENT is
+  pr ENCRYPTION + MATRIX .
+  pr COLLECTION{Prin} * (sort Collection{Prin} to ColPrin ) .
+  pr COLLECTION{Msg} * (sort Collection{Msg} to ColMsg ) .
+  pr COLLECTION{Key} * (sort Collection{Key} to ColKey ) .
+
+  sort OComp .
+
+***(
+ * basic observable components
+)
+--- principals participating in the protocol
+  op (prins:_) : ColPrin -> OComp [ctor] .
+  
+--- soup of messages in the network
+  op (nw:_) : ColMsg -> OComp [ctor] .
+
+--- soup of shared keys computed by each principal
+  op (keys[_]:_) : Prin ColKey -> OComp [ctor] .
+
+--- key obtained by eve
+  op (glean-keys:_) : ColKey -> OComp [ctor] .
+endfm

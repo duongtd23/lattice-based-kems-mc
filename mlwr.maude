@@ -1,0 +1,203 @@
+fmod FRACTION is 
+  pr INT .
+  sort Frac .
+  subsort Int < Frac .
+
+  op _/_ : Int Int -> Frac [ctor] .
+endfm
+
+fmod MLWR-POLYNOMIAL is
+  pr POLYNOMIAL + FRACTION .
+  subsort Frac < Poly .
+
+  op _md_ : Poly NzNat -> Poly [ctor prec 31] .
+endfm
+
+fmod MLWR-VECTOR is
+  pr VECTOR + MLWR-POLYNOMIAL .
+
+  op _md_ : Vector NzNat -> Vector [prec 31] .
+  op round : Vector -> Vector .
+  op _v*_ : Frac Vector -> Vector [prec 31 gather (E e)] .
+
+  vars V1 V2 V3 : Vector .
+  vars N N2 : NzNat .
+  eq round(V1) = V1 .
+  eq (((N / N2) v* (V1 md N2)) dot V2) md N
+    = ((N / N2) p* (V1 dot V2)) md N .
+endfm
+
+fmod MLWR-ENCRYPTION is
+  pr ENCRYPTION .
+  op hiho : Poly -> Poly .
+endfm
+
+view Vector from TRIV to VECTOR is
+  sort Elt to Vector .
+endv
+
+fmod MLWR-OCOMP is
+  pr OBSERVABLE-COMPONENT .
+  pr MLWR-POLYNOMIAL + MLWR-VECTOR + MLWR-ENCRYPTION .
+  pr COLLECTION{Vector} * (sort Collection{Vector} to ColVector ) .
+  pr SLIST{Vector} * (sort List{Vector} to ListVector ) .
+
+***(
+ * additional observable components
+)
+--- random seeds of Alice and Bob
+  op (s[_]:_) : Prin Vector -> OComp [ctor] .
+  
+--- random seeds
+  op (rd-s:_) : ListVector -> OComp [ctor] .
+
+--- random values owned by Eve
+  op (ss:_) : ColVector -> OComp [ctor] .
+  --- op (keys:_) : ColKey -> OComp [ctor] .
+endfm
+
+view OComp from TRIV to MLWR-OCOMP is
+  sort Elt to OComp .
+endv
+
+fmod CONFIG is
+  pr SOUP{OComp} + SAMPLING .
+  sort Config .
+  op {_} : Soup{OComp} -> Config [ctor] .
+
+--- initial states
+  op init : -> Config .
+
+--- constants, known by everybody
+  ops p q : -> NzNat .
+  ops mA : -> Matrix .
+
+  ops s1 s2 s3 s4 : -> Vector .
+  ops alice bob : -> Prin .
+
+  eq isSmall?(s1) = true .
+  eq isSmall?(s2) = true .
+  eq isSmall?(s3) = true .
+  eq isSmall?(s4) = true .
+
+  eq init = {(nw: empty) (prins: (alice ; bob ; eve))
+    (rd-s: (s1 , s2 , s3 , s4))
+    (keys[alice]: empty) (keys[bob]: empty) (glean-keys: empty)
+    (s[alice]: 0) (s[bob]: 0) (ss: empty)} .
+
+  vars P1 P2 P3 M : Poly .
+  vars S S' : Vector .
+  vars MA : Matrix .
+  vars K1 K2 : Poly .
+  vars P Q : Int .
+
+--- because p^2/8q = 2
+  eq ((p / q) p* K1 p+
+      neg((p / 4) p* hiho(K2)) p* (p / q) p+ 
+      (p / q) p* (p / 8)) md 2
+    = ((p / q) p* K1) md 2 .
+
+--- for rewriting
+  eq mA m* s2 dot s1 = mA m* s1 dot s2 .
+  eq mA m* s3 dot s2 = mA m* s2 dot s3 .
+  eq mA m* s4 dot s3 = mA m* s3 dot s4 .
+endfm
+
+mod MLWR is 
+  pr CONFIG .
+  vars A B C : Prin .
+  vars PoV1 PoV2 PoV3 PoV4 : ColVector .
+  vars VL VL2 VL3 : ListVector .
+  vars KS : ColKey .
+  vars K1 K2 K3 K1' K2' : Poly .
+  vars KE1 KE2 KE3 : Key .
+  vars MS MS2 MS3 : ColMsg .
+  vars N P Q : Nat .
+  var OCs : Soup{OComp} . 
+  vars PS : ColPrin .
+  vars S1 S2 X1 X2 V1 V2 SE XA XB : Vector .
+  vars MG1 MG2 MG3 MG4 : Msg .
+  vars MsgStat MsgStat2 : MsgState .
+  vars MA : Matrix .
+  vars W2 WB : Poly .
+
+  rl [stutter] : {(rd-s: null) OCs} => {(rd-s: null) OCs} .
+
+--- alice send msg #1
+  crl [keygen] : {(rd-s: (S1, VL)) (s[A]: V1) 
+    (prins: (A ; B ; PS)) (nw: MS) OCs}
+  => {(rd-s: VL) (s[A]: S1) (prins: (A ; B ; PS)) 
+    (nw: (MS ; msg1(A,A,B, X1, sent))) OCs} 
+  if X1 := round((p / q) v* ((mA m* S1) md q)) .
+
+--- encaps
+  crl [encaps] : {(rd-s: (S2, VL)) (s[B]: V2) (keys[B]: KS)
+    (nw: (msg1(C,A,B, X1, sent) ; MS)) OCs}
+  => {(rd-s: VL) (s[B]: S2) 
+    (keys[B]: (KS ; key(round((p / q) p* K2) md 2, A)))
+    (nw: (msg1(C,A,B, X1, replied) ; 
+      msg2(B,B,A, X2 && W2, sent) ;
+      MS)) OCs} 
+  if X2 := round((p / q) v* ((mA m* S2) md q)) /\
+    K2 := (X1 dot S2) md p /\
+    W2 := hiho(K2) .
+
+--- decaps
+  crl [decaps] : {(s[A]: S1) (keys[A]: KS)
+    (nw: (msg1(A,A,B, X1, MsgStat) ; 
+      msg2(C,B,A, X2 && W2, sent) ; MS)) OCs}
+  => {(s[A]: S1) 
+    (keys[A]: (KS ; key(round((p / q) p* 
+      (K1 p- (p / 4) p* W2 p+ (p / 8))) md 2, B)))
+    (nw: (msg1(A,A,B, X1, MsgStat) ;
+      msg2(C,B,A, X2 && W2, replied) ; MS)) OCs} 
+  if X1 == round((p / q) v* ((mA m* S1) md q)) /\
+    K1 := (X2 dot S1) md p .
+
+***(
+  * eve intercepts a message msg1 sent from alice to bob and
+  * sends a fake message to bob
+)
+  rl [build-s] : {(rd-s: (SE, VL)) (ss: PoV1) OCs}
+  => {(rd-s: VL) (ss: (SE ; PoV1)) OCs} .
+
+  crl [keygen-eve] : {(ss: (SE ; PoV1))
+    (nw: (msg1(A,A,B, XA, sent) ; MS)) OCs}
+  => {(ss: (SE ; PoV1))
+    (nw: (msg1(A,A,B, XA, intercepted) ;
+      msg1(eve,A,B, X1, sent) ; MS)) OCs}
+  if X1 := round((p / q) v* (mA m* SE md q)) .
+
+  crl [encaps-eve] : {(ss: (SE ; PoV1))
+    (nw: (msg1(A,A,B, XA, intercepted) ; MS)) 
+    (glean-keys: KS) OCs}
+  => {(ss: (SE ; PoV1))
+    (nw: (msg1(A,A,B, XA, intercepted) ;
+      msg2(eve,B,A, X2 && W2, sent) ; MS)) 
+    (glean-keys: (KS ; key(round((p / q) p* K2) md 2, A) )) OCs} 
+  if X2 := round((p / q) v* (mA m* SE md q)) /\
+    K2 := (XA dot SE) md p /\
+    W2 := hiho(K2) /\
+    msg2(eve,B,A, X2 && W2, sent) \in MS = false /\
+    msg2(eve,B,A, X2 && W2, replied) \in MS = false .
+
+  crl [decaps-eve] : {(ss: (SE ; PoV1))
+    (nw: (msg1(eve,A,B, X1, replied) ;
+      msg2(B,B,A, XB && WB, sent) ; MS)) 
+    (glean-keys: KS) OCs}
+  => {(ss: (SE ; PoV1))
+    (nw: (msg1(eve,A,B, X1, replied) ;
+      msg2(B,B,A, XB && WB, intercepted) ; MS)) 
+    (glean-keys: (KS ; key(round((p / q) p* 
+        (K1 p- (p / 4) p* WB p+ (p / 8))) md 2, B))) OCs} 
+  if X1 == round((p / q) v* (mA m* SE md q)) /\
+    K1 := (XB dot SE) md p .
+  
+endm
+
+search [1] in MLWR : 
+  init =>* {(keys[alice]: key(K1,bob)) (keys[bob]: key(K2,alice)) 
+    (glean-keys: (key(K1,alice) ; key(K2,bob))) OCs} .
+eof
+
+search in MLWR : init =>* {OCs} .
