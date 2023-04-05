@@ -36,7 +36,7 @@ endfm
 fmod SABER-OCOMP is
   pr OBSERVABLE-COMPONENT .
   pr SABER-POLYNOMIAL + SABER-VECTOR + SABER-ENCRYPTION .
-  pr COLLECTION{Poly} * (sort Collection{Poly} to ColPoly ) .
+  pr SSET{Poly} * (sort Set{Poly} to PolySet ) .
   pr SLIST{Poly} * (sort List{Poly} to ListPoly ) .
 
 ***(
@@ -55,9 +55,9 @@ fmod SABER-OCOMP is
   op (rd-m:_) : ListPoly -> OComp [ctor] .
 
 --- random values owned by Eve
-  op (seeds:_) : ColPoly -> OComp [ctor] .
-  op (rs:_) : ColPoly -> OComp [ctor] .
-  op (ms:_) : ColPoly -> OComp [ctor] .
+  op (seeds:_) : PolySet -> OComp [ctor] .
+  op (rs:_) : PolySet -> OComp [ctor] .
+  op (ms:_) : PolySet -> OComp [ctor] .
 endfm
 
 view OComp from TRIV to SABER-OCOMP is
@@ -112,18 +112,17 @@ endfm
 mod SABER is 
   pr CONFIG + SAMPLING .
   vars A B C : Prin .
-  vars PC1 PC2 PC3 PC4 : ColPoly .
-  vars KS : ColKey .
+  vars PC1 PC2 PC3 PC4 : PolySet .
+  vars KS : KeySet .
   vars PL PL2 PL3 : ListPoly .
   vars K1 K2 K3 : Poly .
   vars KE1 KE2 KE3 : Key .
-  vars MS MS2 MS3 : ColMsg .
+  vars MS MS2 MS3 : Network .
   var OCs : Soup{OComp} . 
-  vars PS : ColPrin .
+  vars PS : PrinSet .
   vars M M2 SD M' R V V' P1 P2 CM SD-A CM-B : Poly .
   vars VB VB' PK T U UB TA S S' VB-A VB'-B : Vector .
   vars MG1 MG2 MG3 MG4 : Msg .
-  vars MsgStat MsgStat2 : MsgState .
   vars Kr Kr' RoSig : PolyPair .
   vars MA : Matrix .
   vars CB CB' : PVPair .
@@ -143,30 +142,30 @@ mod SABER is
     (prins: (A ; B ; PS)) (nw: MS) OCs}
   => {(rd-seed: PL) (rd-r: PL2) (seed[A]: SD) (r[A]: R) 
     (prins: (A ; B ; PS)) 
-    (nw: (MS ; msg1(A,A,B, VB && SD, sent))) OCs} 
+    (nw: (MS ; msg1(A,A,B, VB && SD))) OCs} 
   if MA := gen-A(SD) /\
     S := sample-s(R) /\
     VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
 
 --- encaps
   crl [encaps] : {(rd-m: (M, PL)) (m[B]: P1) (keys[B]: KS)
-    (nw: (msg1(C,A,B, VB && SD, sent) ; MS)) OCs}
+    (nw: (msg1(C,A,B, VB && SD) ; MS)) OCs}
   => {(rd-m: PL) (m[B]: M) 
-    (keys[B]: (KS ; key( H(H(CB) || 1st(Kr)) , A)))
-    (nw: (msg1(C,A,B, VB && SD, replied) ; 
-      msg2(B,B,A, CB, sent) ;
+    (keys[B]: (KS ; responder( H(H(CB) || 1st(Kr)) , A)))
+    (nw: (msg1(C,A,B, VB && SD) ; 
+      msg2(B,B,A, CB) ;
       MS)) OCs} 
   if Kr := G(F(VB && SD) || M) /\
     CB := enc(SD,VB,M,2nd(Kr)) .
 
 --- decaps
   crl [decaps] : {(seed[A]: SD) (r[A]: R)  (keys[A]: KS)
-    (nw: (msg1(A,A,B, VB && SD, MsgStat) ; 
-      msg2(C,B,A, VB' && CM, sent) ; MS)) OCs}
+    (nw: (msg1(A,A,B, VB && SD) ; 
+      msg2(C,B,A, VB' && CM) ; MS)) OCs}
   => {(seed[A]: SD) (r[A]: R) 
-    (keys[A]: (KS ; key( H(H(CB') || 1st(Kr')) , B)))
-    (nw: (msg1(A,A,B, VB && SD, MsgStat) ;
-      msg2(C,B,A, VB' && CM, replied) ; MS)) OCs} 
+    (keys[A]: (KS ; initiator( H(H(CB') || 1st(Kr')) , B)))
+    (nw: (msg1(A,A,B, VB && SD) ;
+      msg2(C,B,A, VB' && CM) ; MS)) OCs} 
   if MA := gen-A(SD) /\
     S := sample-s(R) /\
     VB == shiftR((tp(MA) m* S v+ h) md q, esq - esp) /\
@@ -192,35 +191,33 @@ mod SABER is
   => {(rd-m: PL) (ms: (M ; PC1)) OCs} .
 
   crl [keygen-eve] : {(seeds: (SD ; PC1)) (rs: (R ; PC2))
-    (nw: (msg1(A,A,B, VB-A && SD-A, sent) ; MS)) OCs}
+    (nw: (msg1(A,A,B, VB-A && SD-A) ; MS)) OCs}
   => {(seeds: (SD ; PC1)) (rs: (R ; PC2))
-    (nw: (msg1(A,A,B, VB-A && SD-A, intercepted) ;
-      msg1(eve,A,B, VB && SD, sent) ; MS)) OCs}
+    (nw: (msg1(A,A,B, VB-A && SD-A) ;
+      msg1(eve,A,B, VB && SD) ; MS)) OCs}
   if MA := gen-A(SD) /\
     S := sample-s(R) /\
     VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
 
   crl [encaps-eve] : {(ms: (M ; PC3))
-    (nw: (msg1(A,A,B, VB-A && SD-A, intercepted) ; MS)) 
+    (nw: (msg1(A,A,B, VB-A && SD-A) ; MS)) 
     (glean-keys: KS) OCs}
   => {(ms: (M ; PC3))
-    (nw: (msg1(A,A,B, VB-A && SD-A, intercepted) ;
-      msg2(eve,B,A, CB, sent) ; MS)) 
-    (glean-keys: (KS ; key( H(H(CB) || 1st(Kr)), A)) ) OCs} 
+    (nw: (msg1(A,A,B, VB-A && SD-A) ;
+      msg2(eve,B,A, CB) ; MS)) 
+    (glean-keys: (KS ; responder( H(H(CB) || 1st(Kr)), A)) ) OCs} 
   if Kr := G(F(VB-A && SD-A) || M) /\
-    CB := enc(SD-A,VB-A,M,2nd(Kr)) /\
-    msg2(eve,B,A, CB, sent) \in MS = false /\
-    msg2(eve,B,A, CB, replied) \in MS = false .
+    CB := enc(SD-A,VB-A,M,2nd(Kr)) .
 
   crl [decaps-eve] : {(seeds: (SD ; PC1)) (rs: (R ; PC2)) 
     (ms: (M ; PC3))
-    (nw: (msg1(eve,A,B, VB && SD, replied) ;
-      msg2(B,B,A, VB'-B && CM-B, sent) ; MS)) 
+    (nw: (msg1(eve,A,B, VB && SD) ;
+      msg2(B,B,A, VB'-B && CM-B) ; MS)) 
     (glean-keys: KS) OCs}
   => {(seeds: (SD ; PC1)) (rs: (R ; PC2)) (ms: (M ; PC3))
-    (nw: (msg1(eve,A,B, VB && SD, replied) ;
-      msg2(B,B,A, VB'-B && CM-B, intercepted) ; MS)) 
-    (glean-keys: (KS ; key(H(H(CB') || 1st(Kr')), B)) ) OCs} 
+    (nw: (msg1(eve,A,B, VB && SD) ;
+      msg2(B,B,A, VB'-B && CM-B) ; MS)) 
+    (glean-keys: (KS ; initiator(H(H(CB') || 1st(Kr')), B)) ) OCs} 
   if MA := gen-A(SD) /\
     S := sample-s(R) /\
     VB == shiftR((tp(MA) m* S v+ h) md q, esq - esp) /\
@@ -232,8 +229,8 @@ mod SABER is
 endm
 
 search [1] in SABER : 
-  init =>* {(keys[alice]: key(K1,bob)) (keys[bob]: key(K2,alice)) 
-    (glean-keys: (key(K1,alice) ; key(K2,bob) ; KS)) OCs} .
+  init =>* {(keys[alice]: initiator(K1,bob)) (keys[bob]: responder(K2,alice)) 
+    (glean-keys: (responder(K1,alice) ; initiator(K2,bob) ; KS)) OCs} .
 eof
 
 search in SABER : init =>* {OCs} . 

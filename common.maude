@@ -5,18 +5,20 @@ fmod PRINCIPAL is
   op eve : -> Prin [ctor] .
 endfm
 
-fmod COLLECTION{X :: TRIV} is
+
+fmod SSET{X :: TRIV} is
   pr NAT .
-  sort Collection{X} .
-  subsort X$Elt < Collection{X} .
-  op empty : -> Collection{X} [ctor] .
-  op _;_ : Collection{X} Collection{X} -> Collection{X} [assoc comm id: empty ctor] .
-  op _\in_ : X$Elt Collection{X} -> Bool .
+  sort Set{X} .
+  subsort X$Elt < Set{X} .
+  op empty : -> Set{X} [ctor] .
+  op _;_ : Set{X} Set{X} -> Set{X} [assoc comm id: empty ctor] .
+  op _\in_ : X$Elt Set{X} -> Bool .
 
   var E : X$Elt .
-  var C : Collection{X} .
+  var C : Set{X} .
   eq E \in (E ; C) = true .
   eq E \in C = false [owise] .
+  eq E ; E = E .
 endfm
 
 fmod SLIST{X :: TRIV} is
@@ -172,23 +174,21 @@ fmod SAMPLING is
   eq isSmall?(sample-e2(P)) = true .
 endfm
 
-fmod MSG-STATE is
-  sort MsgState .
-  ops sent replied intercepted : -> MsgState .
-endfm
-
 fmod MESSAGE is
-  pr PRINCIPAL + POLY-PAIR + POLY-VECTOR-PAIR + MATRIX + MSG-STATE .
+  pr PRINCIPAL + POLY-PAIR + POLY-VECTOR-PAIR + MATRIX .
   sort Msg .
 
-  op msg1 : Prin Prin Prin PVPair MsgState -> Msg [ctor] .
-  op msg2 : Prin Prin Prin PVPair MsgState -> Msg [ctor] .
+  op msg1 : Prin Prin Prin PVPair -> Msg [ctor] .
+  op msg2 : Prin Prin Prin PVPair -> Msg [ctor] .
 endfm
 
 fmod KEY is 
   pr POLYNOMIAL + PRINCIPAL .
   sort Key .
-  op key : Poly Prin -> Key [ctor] .
+--- initiator(K,B): the shared key established with B, where B is the responder
+  op initiator : Poly Prin -> Key [ctor] .
+--- responder(K,A): the shared key established with A, where A is the initiator
+  op responder : Poly Prin -> Key [ctor] .
 endfm
 
 view Prin from TRIV to PRINCIPAL is
@@ -206,9 +206,9 @@ endv
 
 fmod OBSERVABLE-COMPONENT is
   pr ENCRYPTION + MATRIX .
-  pr COLLECTION{Prin} * (sort Collection{Prin} to ColPrin ) .
-  pr COLLECTION{Msg} * (sort Collection{Msg} to ColMsg ) .
-  pr COLLECTION{Key} * (sort Collection{Key} to ColKey ) .
+  pr SSET{Prin} * (sort Set{Prin} to PrinSet ) .
+  pr SSET{Msg} * (sort Set{Msg} to Network ) .
+  pr SSET{Key} * (sort Set{Key} to KeySet ) .
 
   sort OComp .
 
@@ -216,14 +216,14 @@ fmod OBSERVABLE-COMPONENT is
  * basic observable components
 )
 --- principals participating in the protocol
-  op (prins:_) : ColPrin -> OComp [ctor] .
+  op (prins:_) : PrinSet -> OComp [ctor] .
   
 --- soup of messages in the network
-  op (nw:_) : ColMsg -> OComp [ctor] .
+  op (nw:_) : Network -> OComp [ctor] .
 
 --- soup of shared keys computed by each principal
-  op (keys[_]:_) : Prin ColKey -> OComp [ctor] .
+  op (keys[_]:_) : Prin KeySet -> OComp [ctor] .
 
 --- key obtained by eve
-  op (glean-keys:_) : ColKey -> OComp [ctor] .
+  op (glean-keys:_) : KeySet -> OComp [ctor] .
 endfm

@@ -39,7 +39,7 @@ endv
 fmod MLWR-OCOMP is
   pr OBSERVABLE-COMPONENT .
   pr MLWR-POLYNOMIAL + MLWR-VECTOR + MLWR-ENCRYPTION .
-  pr COLLECTION{Vector} * (sort Collection{Vector} to ColVector ) .
+  pr SSET{Vector} * (sort Set{Vector} to VectorSet ) .
   pr SLIST{Vector} * (sort List{Vector} to ListVector ) .
 
 ***(
@@ -52,8 +52,7 @@ fmod MLWR-OCOMP is
   op (rd-s:_) : ListVector -> OComp [ctor] .
 
 --- random values owned by Eve
-  op (ss:_) : ColVector -> OComp [ctor] .
-  --- op (keys:_) : ColKey -> OComp [ctor] .
+  op (ss:_) : VectorSet -> OComp [ctor] .
 endfm
 
 view OComp from TRIV to MLWR-OCOMP is
@@ -81,7 +80,7 @@ fmod CONFIG is
   eq isSmall?(s4) = true .
 
   eq init = {(nw: empty) (prins: (alice ; bob ; eve))
-    (rd-s: (s1 , s2 , s3 , s4))
+    (rd-s: (s1 , s2 , s3))
     (keys[alice]: empty) (keys[bob]: empty) (glean-keys: empty)
     (s[alice]: 0) (s[bob]: 0) (ss: empty)} .
 
@@ -106,18 +105,17 @@ endfm
 mod MLWR is 
   pr CONFIG .
   vars A B C : Prin .
-  vars PoV1 PoV2 PoV3 PoV4 : ColVector .
+  vars PoV1 PoV2 PoV3 PoV4 : VectorSet .
   vars VL VL2 VL3 : ListVector .
-  vars KS : ColKey .
+  vars KS : KeySet .
   vars K1 K2 K3 K1' K2' : Poly .
   vars KE1 KE2 KE3 : Key .
-  vars MS MS2 MS3 : ColMsg .
+  vars MS MS2 MS3 : Network .
   vars N P Q : Nat .
   var OCs : Soup{OComp} . 
-  vars PS : ColPrin .
+  vars PS : PrinSet .
   vars S1 S2 X1 X2 V1 V2 SE XA XB : Vector .
   vars MG1 MG2 MG3 MG4 : Msg .
-  vars MsgStat MsgStat2 : MsgState .
   vars MA : Matrix .
   vars W2 WB : Poly .
 
@@ -127,30 +125,31 @@ mod MLWR is
   crl [keygen] : {(rd-s: (S1, VL)) (s[A]: V1) 
     (prins: (A ; B ; PS)) (nw: MS) OCs}
   => {(rd-s: VL) (s[A]: S1) (prins: (A ; B ; PS)) 
-    (nw: (MS ; msg1(A,A,B, X1, sent))) OCs} 
+    (nw: (MS ; msg1(A,A,B, X1))) OCs} 
   if X1 := round((p / q) v* ((mA m* S1) md q)) .
 
 --- encaps
   crl [encaps] : {(rd-s: (S2, VL)) (s[B]: V2) (keys[B]: KS)
-    (nw: (msg1(C,A,B, X1, sent) ; MS)) OCs}
+    (nw: (msg1(C,A,B, X1) ; MS)) OCs}
   => {(rd-s: VL) (s[B]: S2) 
-    (keys[B]: (KS ; key(round((p / q) p* K2) md 2, A)))
-    (nw: (msg1(C,A,B, X1, replied) ; 
-      msg2(B,B,A, X2 && W2, sent) ;
+    (keys[B]: (KS ; responder(round((p / q) p* K2) md 2, A)))
+    (nw: (msg1(C,A,B, X1) ; 
+      msg2(B,B,A, X2 && W2) ;
       MS)) OCs} 
   if X2 := round((p / q) v* ((mA m* S2) md q)) /\
     K2 := (X1 dot S2) md p /\
-    W2 := hiho(K2) .
+    W2 := hiho(K2) /\
+    not(msg2(B,B,A, X2 && W2) \in MS) .
 
 --- decaps
   crl [decaps] : {(s[A]: S1) (keys[A]: KS)
-    (nw: (msg1(A,A,B, X1, MsgStat) ; 
-      msg2(C,B,A, X2 && W2, sent) ; MS)) OCs}
+    (nw: (msg1(A,A,B, X1) ; 
+      msg2(C,B,A, X2 && W2) ; MS)) OCs}
   => {(s[A]: S1) 
-    (keys[A]: (KS ; key(round((p / q) p* 
+    (keys[A]: (KS ; initiator(round((p / q) p* 
       (K1 p- (p / 4) p* W2 p+ (p / 8))) md 2, B)))
-    (nw: (msg1(A,A,B, X1, MsgStat) ;
-      msg2(C,B,A, X2 && W2, replied) ; MS)) OCs} 
+    (nw: (msg1(A,A,B, X1) ;
+      msg2(C,B,A, X2 && W2) ; MS)) OCs} 
   if X1 == round((p / q) v* ((mA m* S1) md q)) /\
     K1 := (X2 dot S1) md p .
 
@@ -162,33 +161,32 @@ mod MLWR is
   => {(rd-s: VL) (ss: (SE ; PoV1)) OCs} .
 
   crl [keygen-eve] : {(ss: (SE ; PoV1))
-    (nw: (msg1(A,A,B, XA, sent) ; MS)) OCs}
+    (nw: (msg1(A,A,B, XA) ; MS)) OCs}
   => {(ss: (SE ; PoV1))
-    (nw: (msg1(A,A,B, XA, intercepted) ;
-      msg1(eve,A,B, X1, sent) ; MS)) OCs}
-  if X1 := round((p / q) v* (mA m* SE md q)) .
+    (nw: (msg1(A,A,B, XA) ;
+      msg1(eve,A,B, X1) ; MS)) OCs}
+  if X1 := round((p / q) v* (mA m* SE md q)) /\
+    not(msg1(eve,A,B, X1) \in MS) .
 
   crl [encaps-eve] : {(ss: (SE ; PoV1))
-    (nw: (msg1(A,A,B, XA, intercepted) ; MS)) 
+    (nw: (msg1(A,A,B, XA) ; MS)) 
     (glean-keys: KS) OCs}
   => {(ss: (SE ; PoV1))
-    (nw: (msg1(A,A,B, XA, intercepted) ;
-      msg2(eve,B,A, X2 && W2, sent) ; MS)) 
-    (glean-keys: (KS ; key(round((p / q) p* K2) md 2, A) )) OCs} 
+    (nw: (msg1(A,A,B, XA) ;
+      msg2(eve,B,A, X2 && W2) ; MS)) 
+    (glean-keys: (KS ; responder(round((p / q) p* K2) md 2, A) )) OCs} 
   if X2 := round((p / q) v* (mA m* SE md q)) /\
     K2 := (XA dot SE) md p /\
-    W2 := hiho(K2) /\
-    msg2(eve,B,A, X2 && W2, sent) \in MS = false /\
-    msg2(eve,B,A, X2 && W2, replied) \in MS = false .
+    W2 := hiho(K2) .
 
   crl [decaps-eve] : {(ss: (SE ; PoV1))
-    (nw: (msg1(eve,A,B, X1, replied) ;
-      msg2(B,B,A, XB && WB, sent) ; MS)) 
+    (nw: (msg1(eve,A,B, X1) ;
+      msg2(B,B,A, XB && WB) ; MS)) 
     (glean-keys: KS) OCs}
   => {(ss: (SE ; PoV1))
-    (nw: (msg1(eve,A,B, X1, replied) ;
-      msg2(B,B,A, XB && WB, intercepted) ; MS)) 
-    (glean-keys: (KS ; key(round((p / q) p* 
+    (nw: (msg1(eve,A,B, X1) ;
+      msg2(B,B,A, XB && WB) ; MS)) 
+    (glean-keys: (KS ; initiator(round((p / q) p* 
         (K1 p- (p / 4) p* WB p+ (p / 8))) md 2, B))) OCs} 
   if X1 == round((p / q) v* (mA m* SE md q)) /\
     K1 := (XB dot SE) md p .
@@ -196,8 +194,8 @@ mod MLWR is
 endm
 
 search [1] in MLWR : 
-  init =>* {(keys[alice]: key(K1,bob)) (keys[bob]: key(K2,alice)) 
-    (glean-keys: (key(K1,alice) ; key(K2,bob))) OCs} .
+  init =>* {(keys[alice]: initiator(K1,bob)) (keys[bob]: responder(K2,alice)) 
+    (glean-keys: (responder(K1,alice) ; initiator(K2,bob))) OCs} .
 eof
 
 search in MLWR : init =>* {OCs} .
