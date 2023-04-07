@@ -84,7 +84,6 @@ fmod CONFIG is
     (keys[alice]: empty) (keys[bob]: empty) (glean-keys: empty)
     (s[alice]: 0) (s[bob]: 0) (ss: empty)} .
 
-  vars P1 P2 P3 M : Poly .
   vars S S' : Vector .
   vars MA : Matrix .
   vars K1 K2 : Poly .
@@ -122,11 +121,12 @@ mod MLWR is
   rl [stutter] : {(rd-s: null) OCs} => {(rd-s: null) OCs} .
 
 --- alice send msg #1
-  crl [keygen] : {(rd-s: (S1, VL)) (s[A]: V1) 
-    (prins: (A ; B ; PS)) (nw: MS) OCs}
-  => {(rd-s: VL) (s[A]: S1) (prins: (A ; B ; PS)) 
+  crl [keygen] : 
+   {(prins: (A ; B ; PS)) (s[A]: V1) (rd-s: (S1, VL)) 
+    (nw: MS) OCs}
+=> {(prins: (A ; B ; PS)) (s[A]: S1) (rd-s: VL)
     (nw: (MS ; msg1(A,A,B, X1))) OCs} 
-  if X1 := round((p / q) v* ((mA m* S1) md q)) .
+if X1 := round((p / q) v* ((mA m* S1) md q)) .
 
 --- encaps
   crl [encaps] : {(rd-s: (S2, VL)) (s[B]: V2) (keys[B]: KS)

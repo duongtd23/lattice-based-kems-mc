@@ -3,11 +3,11 @@ fmod SABER-POLYNOMIAL is
 
   op _md_ : Poly NzNat -> Poly [ctor prec 31] .
 
-  vars P0 P1 P2 P3 : Poly .
+  vars P0 P P' P3 : Poly .
   vars K K2 : NzNat .
 
-  eq (P1 p+ (P2 md K)) md K = (P1 p+ P2) md K .
-  eq neg(P1 md K) = neg(P1) md K .
+  eq (P p+ (P' md K)) md K = (P p+ P') md K .
+  eq neg(P md K) = neg(P) md K .
 
 --- bitwise (right) shift
   op shiftR : Poly Int -> Poly .
@@ -91,7 +91,7 @@ fmod CONFIG is
     (m[alice]: 0) (m[bob]: 0)
     (seeds: empty) (rs: empty) (ms: empty)} .
 
-  vars P1 P2 P3 M CM : Poly .
+  vars P P' P3 M CM : Poly .
   vars S S' B B' : Vector .
   vars MA : Matrix .
   vars K Q K2 PT 2PT 2P1 : Int .
@@ -112,17 +112,15 @@ endfm
 mod SABER is 
   pr CONFIG + SAMPLING .
   vars A B C : Prin .
-  vars PC1 PC2 PC3 PC4 : PolySet .
+  vars PoS1 PoS2 PoS3 : PolySet .
   vars KS : KeySet .
-  vars PL PL2 PL3 : ListPoly .
+  vars PoL PoL2 : ListPoly .
   vars K1 K2 K3 : Poly .
-  vars KE1 KE2 KE3 : Key .
   vars MS MS2 MS3 : Network .
   var OCs : Soup{OComp} . 
   vars PS : PrinSet .
-  vars M M2 SD M' R V V' P1 P2 CM SD-A CM-B : Poly .
+  vars M M2 SD M' R V V' P P' CM SD-A CM-B : Poly .
   vars VB VB' PK T U UB TA S S' VB-A VB'-B : Vector .
-  vars MG1 MG2 MG3 MG4 : Msg .
   vars Kr Kr' RoSig : PolyPair .
   vars MA : Matrix .
   vars CB CB' : PVPair .
@@ -137,20 +135,21 @@ mod SABER is
     CM := shiftR( ((V' p+ h1) p- (2 ^ (esp - 1)) p* M) md p, esp - esT) .
 
 --- keygen
-  crl [keygen] : {(rd-seed: (SD, PL)) (rd-r: (R, PL2)) 
-    (seed[A]: P1) (r[A]: P2) 
-    (prins: (A ; B ; PS)) (nw: MS) OCs}
-  => {(rd-seed: PL) (rd-r: PL2) (seed[A]: SD) (r[A]: R) 
-    (prins: (A ; B ; PS)) 
+  crl [keygen] : 
+   {(prins: (A ; B ; PS)) (rd-seed: (SD, PoL)) (seed[A]: P)
+    (rd-r: (R, PoL2)) (r[A]: P') 
+    (nw: MS) OCs}
+=> {(prins: (A ; B ; PS)) (rd-seed: PoL)       (seed[A]: SD)
+    (rd-r: PoL2)      (r[A]: R)
     (nw: (MS ; msg1(A,A,B, VB && SD))) OCs} 
-  if MA := gen-A(SD) /\
-    S := sample-s(R) /\
-    VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
+if MA := gen-A(SD) /\
+   S := sample-s(R) /\
+   VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
 
 --- encaps
-  crl [encaps] : {(rd-m: (M, PL)) (m[B]: P1) (keys[B]: KS)
+  crl [encaps] : {(rd-m: (M, PoL)) (m[B]: P) (keys[B]: KS)
     (nw: (msg1(C,A,B, VB && SD) ; MS)) OCs}
-  => {(rd-m: PL) (m[B]: M) 
+  => {(rd-m: PoL) (m[B]: M) 
     (keys[B]: (KS ; responder( H(H(CB) || 1st(Kr)) , A)))
     (nw: (msg1(C,A,B, VB && SD) ; 
       msg2(B,B,A, CB) ;
@@ -181,40 +180,40 @@ mod SABER is
   * eve intercepts a message msg1 sent from alice to bob and
   * sends a fake message to bob
 )
-  rl [build-sds] : {(rd-seed: (SD, PL)) (seeds: PC1) OCs}
-  => {(rd-seed: PL) (seeds: (SD ; PC1)) OCs} .
+  rl [build-sds] : {(rd-seed: (SD, PoL)) (seeds: PoS1) OCs}
+  => {(rd-seed: PoL) (seeds: (SD ; PoS1)) OCs} .
 
-  rl [build-rs] : {(rd-r: (R, PL2)) (rs: PC2) OCs}
-  => {(rd-r: PL2) (rs: (R ; PC2)) OCs} .
+  rl [build-rs] : {(rd-r: (R, PoL2)) (rs: PoS2) OCs}
+  => {(rd-r: PoL2) (rs: (R ; PoS2)) OCs} .
 
-  rl [build-ms] : {(rd-m: (M, PL)) (ms: PC1) OCs}
-  => {(rd-m: PL) (ms: (M ; PC1)) OCs} .
+  rl [build-ms] : {(rd-m: (M, PoL)) (ms: PoS1) OCs}
+  => {(rd-m: PoL) (ms: (M ; PoS1)) OCs} .
 
-  crl [keygen-eve] : {(seeds: (SD ; PC1)) (rs: (R ; PC2))
+  crl [keygen-eve] : {(seeds: (SD ; PoS1)) (rs: (R ; PoS2))
     (nw: (msg1(A,A,B, VB-A && SD-A) ; MS)) OCs}
-  => {(seeds: (SD ; PC1)) (rs: (R ; PC2))
+  => {(seeds: (SD ; PoS1)) (rs: (R ; PoS2))
     (nw: (msg1(A,A,B, VB-A && SD-A) ;
       msg1(eve,A,B, VB && SD) ; MS)) OCs}
   if MA := gen-A(SD) /\
     S := sample-s(R) /\
     VB := shiftR((tp(MA) m* S v+ h) md q, esq - esp) .
 
-  crl [encaps-eve] : {(ms: (M ; PC3))
+  crl [encaps-eve] : {(ms: (M ; PoS3))
     (nw: (msg1(A,A,B, VB-A && SD-A) ; MS)) 
     (glean-keys: KS) OCs}
-  => {(ms: (M ; PC3))
+  => {(ms: (M ; PoS3))
     (nw: (msg1(A,A,B, VB-A && SD-A) ;
       msg2(eve,B,A, CB) ; MS)) 
     (glean-keys: (KS ; responder( H(H(CB) || 1st(Kr)), A)) ) OCs} 
   if Kr := G(F(VB-A && SD-A) || M) /\
     CB := enc(SD-A,VB-A,M,2nd(Kr)) .
 
-  crl [decaps-eve] : {(seeds: (SD ; PC1)) (rs: (R ; PC2)) 
-    (ms: (M ; PC3))
+  crl [decaps-eve] : {(seeds: (SD ; PoS1)) (rs: (R ; PoS2)) 
+    (ms: (M ; PoS3))
     (nw: (msg1(eve,A,B, VB && SD) ;
       msg2(B,B,A, VB'-B && CM-B) ; MS)) 
     (glean-keys: KS) OCs}
-  => {(seeds: (SD ; PC1)) (rs: (R ; PC2)) (ms: (M ; PC3))
+  => {(seeds: (SD ; PoS1)) (rs: (R ; PoS2)) (ms: (M ; PoS3))
     (nw: (msg1(eve,A,B, VB && SD) ;
       msg2(B,B,A, VB'-B && CM-B) ; MS)) 
     (glean-keys: (KS ; initiator(H(H(CB') || 1st(Kr')), B)) ) OCs} 

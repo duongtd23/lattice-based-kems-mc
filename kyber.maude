@@ -85,8 +85,8 @@ mod KYBER is
   vars MS : Network .
   var OCs : Soup{OComp} . 
   vars PS : PrinSet .
-  vars D D2 M M0 M2 P1 P2 Rho RhoA M' V CV V' VB CVB VB' Rseed Sig : Poly .
-  vars PK T U CU U' UB CUB UB' TA : Vector .
+  vars D M M0 P Rho RhoA M' V CV V' VB CVB VB' Rseed Sig : Poly .
+  vars T U CU U' UB CUB UB' TA : Vector .
   vars Kr Kr2 : PolyPair .
 
 --- CPAPKE.enc: pk(= t + ro), m, r
@@ -100,33 +100,35 @@ mod KYBER is
     dv) .
 
 --- keygen
-  crl [keygen] : {(rd-d: (D, PoL)) (d[A]: P1) 
-    (prins: (A ; B ; PS)) (nw: MS) OCs}
-  => {(rd-d: PoL) (d[A]: D) 
-    (prins: (A ; B ; PS)) 
-    (nw: (MS ; msg1(A,A,B, 
-      (gen-A(Rho) m* sample-s(Sig) v+ sample-e(Sig)) && Rho))) OCs} 
-  if Rho := 1st(G(D)) /\ Sig := 2nd(G(D)) .
+  crl [keygen] : 
+     {(prins: (A ; B ; PS)) (rd-d: (D, PoL)) (d[A]: P) 
+      (nw: MS) OCs}
+  => {(prins: (A ; B ; PS)) (rd-d: PoL) (d[A]: D) 
+      (nw: (msg1(A,A,B, (gen-A(Rho) m* sample-s(Sig) v+ 
+            sample-e(Sig)) && Rho) ; MS)) OCs} 
+  if Rho := 1st(G(D)) /\ 
+     Sig := 2nd(G(D)) .
 
 --- encaps
-  crl [encaps] : {(rd-m: (M0, PoL)) (m[B]: P1) (keys[B]: KS)
-    (nw: (msg1(C,A,B, T && Rho) ; MS)) OCs}
+  crl [encaps] : 
+     {(rd-m: (M0, PoL)) (m[B]: P) (keys[B]: KS)
+      (nw: (msg1(C,A,B, T && Rho) ; MS)) OCs}
   => {(rd-m: PoL) (m[B]: M0) 
-    (keys[B]: (KS ; responder(KDF(1st(Kr) || H(CU && CV)), A)))
-    (nw: (msg1(C,A,B, T && Rho) ;
-          msg2(B,B,A, CU && CV) ;
-          MS)) OCs} 
+      (keys[B]: (KS ; responder(KDF(1st(Kr) || H(CU && CV)), A)))
+      (nw: (msg1(C,A,B, T && Rho) ;
+            msg2(B,B,A, CU && CV) ; MS)) OCs} 
   if M := H(M0) /\
-    Kr := G(M || H(T && Rho)) /\
-    CU := enc-u(T, Rho, M, 2nd(Kr)) /\
-    CV := enc-v(T, Rho, M, 2nd(Kr)) .
+     Kr := G(M || H(T && Rho)) /\
+     CU := enc-u(T, Rho, M, 2nd(Kr)) /\
+     CV := enc-v(T, Rho, M, 2nd(Kr)) .
 
 --- decaps
-  crl [decaps] : {(d[A]: D) (keys[A]: KS)
+  crl [decaps] :
+   {(d[A]: D) (keys[A]: KS)
     (nw: (msg1(A,A,B, T && Rho) ;
           msg2(C,B,A, CU && CV) ; MS)) OCs}
-  => {(d[A]: D) 
-    (keys[A]: (KS ; initiator(KDF(1st(Kr2) || H(CU && CV)), B)))
+=> {(d[A]: D) (keys[A]: 
+      (KS ; initiator(KDF(1st(Kr2) || H(CU && CV)), B)))
     (nw: (msg1(A,A,B, T && Rho) ;
           msg2(C,B,A, CU && CV) ; MS)) OCs} 
   if Sig := 2nd(G(D)) /\
@@ -148,46 +150,49 @@ mod KYBER is
   rl [build-ms] : {(rd-m: (M, PoL)) (ms: PoS) OCs}
   => {(rd-m: PoL) (ms: (PoS ; M)) OCs} .
 
-  crl [keygen-eve] : {(ds: (D ; PoS))
+  crl [keygen-eve] : 
+   {(ds: (D ; PoS)) 
     (nw: (msg1(A,A,B, TA && RhoA) ; MS)) OCs}
-  => {(ds: (D ; PoS))
+=> {(ds: (D ; PoS))
     (nw: (msg1(A,A,B, TA && RhoA) ;
-          msg1(eve,A,B, 
-      (gen-A(Rho) m* sample-s(Sig) v+ sample-e(Sig)) && Rho) ; MS)) OCs}
-  if Rho := 1st(G(D)) /\ Sig := 2nd(G(D)) .
+          msg1(eve,A,B, (gen-A(Rho) m* sample-s(Sig) v+ 
+               sample-e(Sig)) && Rho) ; MS)) OCs}
+if Rho := 1st(G(D)) /\ 
+   Sig := 2nd(G(D)) .
 
-  crl [encaps-eve] : {(ms: (M0 ; PoS))
-    (nw: (msg1(A,A,B, TA && RhoA) ; MS))
-    (glean-keys: KS) OCs}
-  => {(ms: (M0 ; PoS))
+  crl [encaps-eve] : 
+   {(ms: (M0 ; PoS)) (glean-keys: KS)
+    (nw: (msg1(A,A,B, TA && RhoA) ; MS)) OCs}
+=> {(ms: (M0 ; PoS)) (glean-keys: 
+      (responder(KDF(1st(Kr) || H(CU && CV)), A) ; KS)) 
     (nw: (msg1(A,A,B, TA && RhoA) ;
-          msg2(eve,B,A, CU && CV) ; MS)) 
-    (glean-keys: (responder(KDF(1st(Kr) || H(CU && CV)), A) ; KS)) OCs} 
-  if M := H(M0) /\
-    Kr := G(M || H(TA && RhoA)) /\
-    CU := enc-u(TA, RhoA, M, 2nd(Kr)) /\
-    CV := enc-v(TA, RhoA, M, 2nd(Kr)) .
+          msg2(eve,B,A, CU && CV) ; MS)) OCs} 
+if M := H(M0) /\
+   Kr := G(M || H(TA && RhoA)) /\
+   CU := enc-u(TA, RhoA, M, 2nd(Kr)) /\
+   CV := enc-v(TA, RhoA, M, 2nd(Kr)) .
 
-  crl [decaps-eve] : {(ds: (D ; PoS))
+  crl [decaps-eve] : 
+   {(ds: (D ; PoS))   (glean-keys: KS)
     (nw: (msg1(eve,A,B, T && Rho) ;
-          msg2(B,B,A, CUB && CVB) ; MS))
-    (glean-keys: KS) OCs}
-  => {(ds: (D ; PoS))
+          msg2(B,B,A, CUB && CVB) ; MS)) OCs}
+  => {(ds: (D ; PoS)) (glean-keys: 
+        (initiator(KDF(1st(Kr2) || H(CUB && CVB)), B) ; KS))
     (nw: (msg1(eve,A,B, T && Rho) ;
-          msg2(B,B,A, CUB && CVB) ; MS))
-    (glean-keys: (initiator(KDF(1st(Kr2) || H(CUB && CVB)), B) ; KS)) OCs} 
-  if Sig := 2nd(G(D)) /\
-    U' := decompr(CUB, du) /\
-    V' := decompr(CVB, dv) /\
-    M' := compr(V' p- tp(sample-s(Sig)) dot U', 1) /\
-    Kr2 := G(M' || H(T && Rho)) /\
-    CUB == enc-u(T,Rho,M',2nd(Kr2)) /\
-    CVB == enc-v(T,Rho,M',2nd(Kr2)) .
+          msg2(B,B,A, CUB && CVB) ; MS)) OCs} 
+if Sig := 2nd(G(D)) /\
+   U'  := decompr(CUB, du) /\
+   V'  := decompr(CVB, dv) /\
+   M'  := compr(V' p- tp(sample-s(Sig)) dot U', 1) /\
+   Kr2 := G(M' || H(T && Rho)) /\
+   CUB == enc-u(T,Rho,M',2nd(Kr2)) /\
+   CVB == enc-v(T,Rho,M',2nd(Kr2)) .
 endm
 
 --- checking the specification correctness
-search [1] in KYBER : 
-  init =>* {(keys[alice]: initiator(K1,bob)) (keys[bob]: responder(K1,alice)) OCs} .
+search [1] in KYBER : init =>* 
+  {(keys[alice]: initiator(K:Poly,bob)) 
+   (keys[bob]  : responder(K:Poly,alice)) OCs} .
 
 --- end of files
 eof  
@@ -195,9 +200,11 @@ eof
 --- finding a state in which eve can learn two keys K1 and K2 of Alice and Bob
 --- to run this command, comment out the "eof" command above, or 
 --- move this command to before the "eof" command above
-search [1] in KYBER : 
-  init =>* {(keys[alice]: initiator(K1,bob)) (keys[bob]: responder(K2,alice)) 
-    (glean-keys: (responder(K1,alice) ; initiator(K2,bob) ; KS)) OCs} .
+search [1] in KYBER : init =>* 
+  {(keys[alice]: initiator(K1:Poly,bob)) 
+   (keys[bob]  : responder(K2:Poly,alice)) 
+   (glean-keys: (responder(K1:Poly,alice) ; 
+                 initiator(K2:Poly,bob) ; KS)) OCs} .
 
 --- confirming the reachable state space is finite 
 search in KYBER : init =>* {OCs} . 
